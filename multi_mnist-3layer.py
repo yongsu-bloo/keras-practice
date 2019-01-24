@@ -9,6 +9,14 @@ from keras.optimizers import Adam
 from numpy.random import seed
 from tensorflow import set_random_seed
 
+def schedule(epoch):
+    lr = 0.0002
+    if epoch < 10:
+        return lr
+    elif (10 <= epoch) and (epoch < 15):
+        return lr / 10.
+    else:
+        return lr / 100.
 
 
 # dataset info
@@ -16,46 +24,40 @@ batch_size = 128
 epochs = 20
 num_classes = 10
 # hyper-parameters
-# lambda1 = 0.
-# lambda2 = 0.
+layer1_size = 1000
+layer2_size = 1000
+layer3_size = 1000
 
-layer1_size = 300
-layer2_size = 100
-
-# lambdas = {'base':(0.,0.), 'l1':(2e-06, 0.), 'l2':(0., 2e-06)}
-lambda1s = [4e-06, 2e-07]#[ float("1e-0{}".format(j)) for j in range(2, 6) ]
-# lambda1s.append(0.0)
+lambda1s = [ 5e-05, 2e-05, 5e-06, 2e-06, 0. ]
 lambda2 = 0.
-# layer_sizes = [(300,100)]
-
-# activation = LeakyReLU(alpha=0.3)
 
 loss_dict = {}
 acc_dict = {}
 zero_dict = {}
 dead_dict = {}
-# for layer1_size, layer2_size in layer_sizes:
-with open('./{}-{}_result2.txt'.format(layer1_size, layer2_size), "w") as f:
-    f.write("{}-{}-{}\n".format(layer1_size, layer2_size, num_classes))
+with open('./logs/mnist/multi_test/{}-{}-{}_result.txt'.format(layer1_size, layer2_size, layer3_size), "w") as f:
+    f.write("lambda1 accuracy layer1_zero-layer2_zero-layer3_zero\n")
     for lambda1 in lambda1s:
+        print("L1 regularization coefficient: {}".format(lambda1))
         losses = [] # the last test loss list
         accuracies = [] # the last test accuracy list
         zero_acts = [] # the number of zero activations (3 dimension each)
         dead_acts = [] # totally dead activations (3 dimension each)
-        for manual_seed in range(10, 20):
+        # lambda1, lambda2 = lambdas[reg_type]
+        for manual_seed in range(10):
             seed(manual_seed)
             set_random_seed(manual_seed)
             hparams = {}
             hparams['l1'] = lambda1
             # hparams['l2'] = lambda2
-            hparams['size'] = "{}-{}".format(layer1_size, layer2_size)
+            hparams['size'] = "{}-{}-{}".format(layer1_size, layer2_size, layer3_size)
 
             hparams['op'] = 'Adam'
             hparams['ep'] = epochs
 
             hparams['act'] = 'relu'
             # PATH info
-            PATH = './logs/mnist/multi_test/300-100-l1/'
+            PATH = './logs/mnist/multi_test/'
             for label  in hparams:
                 PATH += '{}={}-'.format(label, hparams[label])
             st = datetime.datetime.fromtimestamp(time.time()).strftime('%Y-%m-%d %H:%M:%S')
@@ -83,12 +85,17 @@ with open('./{}-{}_result2.txt'.format(layer1_size, layer2_size), "w") as f:
             model = Sequential()
             model.add(Dense(layer1_size, input_shape=(784,),
                             activation='relu',
-                            activity_regularizer=keras.regularizers.l1(lambda1)))
+                            activity_regularizer=keras.regularizers.l1_l2(l1=lambda1, l2=lambda2)))
+            # model.add(LeakyReLU(alpha=0.3))
             model.add(Dense(layer2_size,
                             activation='relu',
-                            activity_regularizer=keras.regularizers.l1(lambda1)))
-            model.add(Dense(num_classes,
-                            activation='softmax'))
+                            activity_regularizer=keras.regularizers.l1_l2(l1=lambda1, l2=lambda2)))
+
+            model.add(Dense(layer3_size,
+                            activation='relu',
+                            activity_regularizer=keras.regularizers.l1_l2(l1=lambda1, l2=lambda2)))
+            # model.add(LeakyReLU(alpha=0.3))
+            model.add(Dense(num_classes, activation='softmax'))
 
             model.summary()
 
@@ -96,12 +103,13 @@ with open('./{}-{}_result2.txt'.format(layer1_size, layer2_size), "w") as f:
                           optimizer=Adam(lr=0.0002, beta_1=0.9, beta_2=0.999, epsilon=None, decay=0.0, amsgrad=False),
                           metrics=['accuracy'])
 
-            checkpoint_path = "checkpoints/300-100-l1/"
+            checkpoint_path = "checkpoints/"
             for label  in hparams:
                 checkpoint_path += '{}={}-'.format(label, hparams[label])
             checkpoint_path += "[{}]".format(manual_seed) + st + ".ckpt"
 
             # Create checkpoint callback
+            lr_callback = keras.callbacks.LearningRateScheduler(schedule, verbose=0)
             cp_callback = keras.callbacks.ModelCheckpoint(checkpoint_path,
                                                              save_weights_only=False,
                                                              verbose=0)
@@ -116,14 +124,14 @@ with open('./{}-{}_result2.txt'.format(layer1_size, layer2_size), "w") as f:
                                                             embeddings_layer_names=None,
                                                             embeddings_metadata=None,
                                                             embeddings_data=None)
-
+            t1 = time.time()
             history = model.fit(x_train, y_train,
                                 batch_size=batch_size,
                                 epochs=epochs,
                                 verbose=1,
                                 validation_data=(x_test, y_test),
-                                callbacks=[tfboard_callback, cp_callback])
-
+                                callbacks=[lr_callback, tfboard_callback, cp_callback])
+            print("Training Time: {:.2f} sec".format(time.time()))
             score = model.evaluate(x_test, y_test, verbose=1)
             print('\nTest loss:', score[0])
             print('Test accuracy:', score[1])
@@ -131,19 +139,45 @@ with open('./{}-{}_result2.txt'.format(layer1_size, layer2_size), "w") as f:
             activations_list = []
 
             imodel1 = Sequential()
-            imodel1.add(Dense(layer1_size, activation='relu', weights=model.layers[0].get_weights() , input_shape=(784,), activity_regularizer=keras.regularizers.l1(lambda1)))
+            imodel1.add(Dense(layer1_size, input_shape=(784,),
+                            activation='relu',
+                            activity_regularizer=keras.regularizers.l1_l2(l1=lambda1, l2=lambda2)))
             activations_list.append(imodel1.predict(x_test, batch_size=batch_size, verbose=0, steps=None))
 
             imodel2 = Sequential()
-            imodel2.add(Dense(layer1_size, activation='relu', weights=model.layers[0].get_weights() , input_shape=(784,), activity_regularizer=keras.regularizers.l1(lambda1)))
-            imodel2.add(Dense(layer2_size, activation='relu', weights=model.layers[1].get_weights() , activity_regularizer=keras.regularizers.l1(lambda1)))
+            imodel2.add(Dense(layer1_size, input_shape=(784,),
+                            activation='relu',
+                            activity_regularizer=keras.regularizers.l1_l2(l1=lambda1, l2=lambda2)))
+            imodel2.add(Dense(layer2_size,
+                            activation='relu',
+                            activity_regularizer=keras.regularizers.l1_l2(l1=lambda1, l2=lambda2)))
             activations_list.append(imodel2.predict(x_test, batch_size=batch_size, verbose=0, steps=None))
 
             imodel3 = Sequential()
-            imodel3.add(Dense(layer1_size, activation='relu', weights=model.layers[0].get_weights() , input_shape=(784,), activity_regularizer=keras.regularizers.l1(lambda1)))
-            imodel3.add(Dense(layer2_size, activation='relu', weights=model.layers[1].get_weights() , activity_regularizer=keras.regularizers.l1(lambda1)))
-            imodel3.add(Dense(num_classes, activation='softmax', weights=model.layers[2].get_weights()))
+            imodel3.add(Dense(layer1_size, input_shape=(784,),
+                            activation='relu',
+                            activity_regularizer=keras.regularizers.l1_l2(l1=lambda1, l2=lambda2)))
+            imodel3.add(Dense(layer2_size,
+                            activation='relu',
+                            activity_regularizer=keras.regularizers.l1_l2(l1=lambda1, l2=lambda2)))
+            imodel3.add(Dense(layer3_size,
+                            activation='relu',
+                            activity_regularizer=keras.regularizers.l1_l2(l1=lambda1, l2=lambda2)))
             activations_list.append(imodel3.predict(x_test, batch_size=batch_size, verbose=0, steps=None))
+
+            # imodel4 = Sequential()
+            # imodel4.add(Dense(layer1_size, input_shape=(784,),
+            #                 activation='relu',
+            #                 activity_regularizer=keras.regularizers.l1_l2(l1=lambda1, l2=lambda2)))
+            # imodel4.add(Dense(layer2_size,
+            #                 activation='relu',
+            #                 activity_regularizer=keras.regularizers.l1_l2(l1=lambda1, l2=lambda2)))
+            # imodel4.add(Dense(layer3_size,
+            #                 activation='relu',
+            #                 activity_regularizer=keras.regularizers.l1_l2(l1=lambda1, l2=lambda2)))
+            # imodel4.add(Dense(num_classes, activation='softmax',
+            #                 activity_regularizer=keras.regularizers.l1_l2(l1=lambda1, l2=lambda2)))
+            # activations_list.append(imodel4.predict(x_test, batch_size=batch_size, verbose=0, steps=None))
 
 
 
@@ -151,12 +185,12 @@ with open('./{}-{}_result2.txt'.format(layer1_size, layer2_size), "w") as f:
                     sum(sum(activations_list[0]==0))/len(x_test),
                     sum(sum(activations_list[1]==0))/len(x_test),
                     sum(sum(activations_list[2]==0))/len(x_test) ))
-            print('# Totally Dead Activations:{}-{}-{}\n'.format(
-                    sum(sum(activations_list[0]==0)==len(x_test)),
-                    sum(sum(activations_list[1]==0)==len(x_test)),
-                    sum(sum(activations_list[2]==0)==len(x_test))))
+            # print('# Totally Dead Activations:{}-{}-{}'.format(
+            #         sum(sum(activations_list[0]==0)==len(x_test)),
+            #         sum(sum(activations_list[1]==0)==len(x_test)),
+            #         sum(sum(activations_list[2]==0)==len(x_test))))
             zero_act = [ sum(sum(activations_list[i]==0))/len(x_test) for i in range(3) ]
-            f.write("{} {:.4f} {:.2f}-{:.2f}-{:.2f}\n".format(lambda1, score[1], *zero_act))
+            f.write("{} {:.4f} {:.2f}-{:.2f}-{:.2f}".format(lambda1, score[1], *zero_act))
             losses.append(score[0])
             accuracies.append(score[1])
             zero_acts.append(zero_act)
@@ -179,6 +213,7 @@ with open('./{}-{}_result2.txt'.format(layer1_size, layer2_size), "w") as f:
         acc_dict[lambda1] = mean_acc
         zero_dict[lambda1] = mean_zero
         dead_dict[lambda1] = mean_dead
+
     print(str(loss_dict))
     print(str(acc_dict))
     print(str(zero_dict))
