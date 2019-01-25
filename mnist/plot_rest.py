@@ -25,18 +25,26 @@ with open(file_path, "r") as file:
         zero_rate = ( (layer_sizes[0] - layer1) + (layer_sizes[1] - layer2)) \
                         / sum(layer_sizes[:-1])
         zero_rates.append(zero_rate)
+
 accuracies = np.array(accuracies)
 zero_rates = np.array(zero_rates)
 group = np.array(group)
-print(accuracies)
-print(zero_rates)
-print(group)
+# print(accuracies)
+# print(zero_rates)
+# print(group)
+
+# regression
+x_new = np.linspace(min(zero_rates), max(zero_rates), num=len(zero_rates)*10)
+coefs = np.polyfit(zero_rates, accuracies, 2)
+ffit = np.polyval(coefs, x_new)
 
 fig, ax = plt.subplots()
+ax.plot(x_new, ffit)
 plt.title("784-300-100-10 MLP")
 for g in np.unique(group):
     ix = np.where(group == g)
     ax.scatter(zero_rates[ix], accuracies[ix], c = color_map[g], label = g)
+
 plt.xlabel("Active activation rate")
 plt.ylabel("Accuracy")
 print("The number of data: {}".format(len(zero_rates)))
