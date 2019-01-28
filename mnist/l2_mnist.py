@@ -21,8 +21,8 @@ num_classes = 10
 
 # model info
 layer_size = (300,100)
-lambda1s = [ float("{}e-0{}".format(i,j)) for i in range(1,2) for j in range(4,6) ]
-lambda1s.append(0.0)
+lambda2s = [ float("{}e-0{}".format(i,j)) for i in range(1,2) for j in range(4,6) ]
+lambda2s.append(0.0)
 # hyper-parameters
 learning_rate = 0.0002
 adamb1 = 0.5
@@ -36,16 +36,16 @@ zero_dict = {}
 dead_dict = {}
 
 time_stamp = datetime.datetime.fromtimestamp(time.time()).strftime('%Y-%m-%d %H:%M:%S')
-with open('./{}-{}-nonorm_result.txt'.format(layer_size[0], layer_size[1]), "w") as f:
+with open('./{}-{}_result.txt'.format(layer_size[0], layer_size[1]), "w") as f:
     f.write("{}-{}-{}\n".format(layer_size[0], layer_size[1], num_classes))
-    for lambda1 in lambda1s:
+    for lambda2 in lambda2s:
         losses = [] # the last test loss list
         accuracies = [] # the last test accuracy list
         zero_acts = [] # the number of zero activations (3 dimension each)
         dead_acts = [] # totally dead activations (3 dimension each)
         # hyper parameters for the path name
         hparams = {}
-        hparams['l1'] = lambda1
+        hparams['l2'] = lambda2
         # hparams['size'] = "{}-{}".format(layer_size[0], layer_size[1])
         hparams['op'] = 'Adam_b1-{}_b2-{}'.format(adamb1, adamb2)
         hparams['lr'] = learning_rate
@@ -55,13 +55,12 @@ with open('./{}-{}-nonorm_result.txt'.format(layer_size[0], layer_size[1]), "w")
             seed(manual_seed*111)
             set_random_seed(manual_seed*111)
             # PATH setting and create
-            PATH = './logs/{}-{}-l1-nonorm/'.format(layer_size[0], layer_size[1])
+            PATH = './logs/{}-{}-l2/'.format(layer_size[0], layer_size[1])
             if not os.path.exists(PATH):
                 os.mkdir(PATH)
             PATH = add_hparams_to_path(PATH, hparams, manual_seed, time_stamp)
             if not os.path.exists(PATH):
-                os.mkdir(PATH)            # print(x_train.shape[0], 'train samples')
-            # print(x_test.shape[0], 'test samples')
+                os.mkdir(PATH)
                 print("Directory " , PATH ,  " Created ")
 
             # the data, split between train and test sets
@@ -81,10 +80,10 @@ with open('./{}-{}-nonorm_result.txt'.format(layer_size[0], layer_size[1]), "w")
             model = Sequential()
             model.add(Dense(layer_size[0], input_shape=(784,),
                             activation='relu',
-                            activity_regularizer=keras.regularizers.l1(lambda1)))
+                            activity_regularizer=keras.regularizers.l2(lambda2)))
             model.add(Dense(layer_size[1],
                             activation='relu',
-                            activity_regularizer=keras.regularizers.l1(lambda1)))
+                            activity_regularizer=keras.regularizers.l2(lambda2)))
             model.add(Dense(num_classes,
                             activation='softmax'))
 
@@ -94,7 +93,9 @@ with open('./{}-{}-nonorm_result.txt'.format(layer_size[0], layer_size[1]), "w")
                           optimizer=Adam(lr=learning_rate, beta_1=adamb1, beta_2=adamb2, epsilon=None, decay=0.0, amsgrad=False),
                           metrics=['accuracy'])
 
-            checkpoint_path = "checkpoints/{}-{}-l1-nonorm/".format(layer_size[0], layer_size[1])
+            checkpoint_path = "checkpoints/{}-{}-l2/".format(layer_size[0], layer_size[1])
+            if not os.path.exists(checkpoint_path):
+                os.mkdir(checkpoint_path)
             checkpoint_path = add_hparams_to_path(checkpoint_path, hparams, manual_seed, time_stamp)
             checkpoint_path += ".ckpt"
             # Create checkpoint and TensorBoard saving callbacks
@@ -127,17 +128,17 @@ with open('./{}-{}-nonorm_result.txt'.format(layer_size[0], layer_size[1]), "w")
             activations_list = []
 
             imodel1 = Sequential()
-            imodel1.add(Dense(layer_size[0], activation='relu', weights=model.layers[0].get_weights() , input_shape=(784,), activity_regularizer=keras.regularizers.l1(lambda1)))
+            imodel1.add(Dense(layer_size[0], activation='relu', weights=model.layers[0].get_weights() , input_shape=(784,), activity_regularizer=keras.regularizers.l2(lambda2)))
             activations_list.append(imodel1.predict(x_test, batch_size=batch_size, verbose=0, steps=None))
 
             imodel2 = Sequential()
-            imodel2.add(Dense(layer_size[0], activation='relu', weights=model.layers[0].get_weights() , input_shape=(784,), activity_regularizer=keras.regularizers.l1(lambda1)))
-            imodel2.add(Dense(layer_size[1], activation='relu', weights=model.layers[1].get_weights() , activity_regularizer=keras.regularizers.l1(lambda1)))
+            imodel2.add(Dense(layer_size[0], activation='relu', weights=model.layers[0].get_weights() , input_shape=(784,), activity_regularizer=keras.regularizers.l2(lambda2)))
+            imodel2.add(Dense(layer_size[1], activation='relu', weights=model.layers[1].get_weights() , activity_regularizer=keras.regularizers.l2(lambda2)))
             activations_list.append(imodel2.predict(x_test, batch_size=batch_size, verbose=0, steps=None))
 
             imodel3 = Sequential()
-            imodel3.add(Dense(layer_size[0], activation='relu', weights=model.layers[0].get_weights() , input_shape=(784,), activity_regularizer=keras.regularizers.l1(lambda1)))
-            imodel3.add(Dense(layer_size[1], activation='relu', weights=model.layers[1].get_weights() , activity_regularizer=keras.regularizers.l1(lambda1)))
+            imodel3.add(Dense(layer_size[0], activation='relu', weights=model.layers[0].get_weights() , input_shape=(784,), activity_regularizer=keras.regularizers.l2(lambda2)))
+            imodel3.add(Dense(layer_size[1], activation='relu', weights=model.layers[1].get_weights() , activity_regularizer=keras.regularizers.l2(lambda2)))
             imodel3.add(Dense(num_classes, activation='softmax', weights=model.layers[2].get_weights()))
             activations_list.append(imodel3.predict(x_test, batch_size=batch_size, verbose=0, steps=None))
 
@@ -152,7 +153,7 @@ with open('./{}-{}-nonorm_result.txt'.format(layer_size[0], layer_size[1]), "w")
                     sum(sum(activations_list[2]==0)==len(x_test))))
 
             zero_act = [ sum(sum(activations_list[i]==0))/len(x_test) for i in range(3) ] # the average number of 0s in activations from each layer
-            f.write("{} {:.4f} {:.2f}-{:.2f}-{:.2f}\n".format(lambda1, score[1], *zero_act))
+            f.write("{} {:.4f} {:.2f}-{:.2f}-{:.2f}\n".format(lambda2, score[1], *zero_act))
             losses.append(score[0])
             accuracies.append(score[1])
             zero_acts.append(zero_act)
@@ -171,10 +172,10 @@ with open('./{}-{}-nonorm_result.txt'.format(layer_size[0], layer_size[1]), "w")
         print("# Zero activation: {:.2f}-{:.2f}-{:.2f}".format(*mean_zero))
         print("# Dead activation: {:.2f}-{:.2f}-{:.2f}\n".format(*mean_dead))
 
-        loss_dict[lambda1] = mean_loss
-        acc_dict[lambda1] = mean_acc
-        zero_dict[lambda1] = mean_zero
-        dead_dict[lambda1] = mean_dead
+        loss_dict[lambda2] = mean_loss
+        acc_dict[lambda2] = mean_acc
+        zero_dict[lambda2] = mean_zero
+        dead_dict[lambda2] = mean_dead
 
     print(str(loss_dict))
     print(str(acc_dict))

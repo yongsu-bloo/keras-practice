@@ -39,7 +39,7 @@ coefs = np.polyfit(zero_rates, accuracies, 2)
 ffit = np.polyval(coefs, x_new)
 
 fig, ax = plt.subplots()
-ax.plot(x_new, ffit)
+# ax.plot(x_new, ffit)
 plt.title("784-300-100-10 MLP")
 for g in np.unique(group):
     ix = np.where(group == g)

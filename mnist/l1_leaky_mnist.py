@@ -4,7 +4,7 @@ import numpy as np
 import keras
 from keras.datasets import mnist
 from keras.models import Sequential
-from keras.layers import Dense
+from keras.layers import Dense, LeakyReLU
 from keras.optimizers import Adam
 from numpy.random import seed
 from tensorflow import set_random_seed
@@ -21,7 +21,7 @@ num_classes = 10
 
 # model info
 layer_size = (300,100)
-lambda1s = [ float("{}e-0{}".format(i,j)) for i in range(1,2) for j in range(4,6) ]
+lambda1s = [ float("{}e-0{}".format(i,j)) for i in range(1,2) for j in range(4,7) ]
 lambda1s.append(0.0)
 # hyper-parameters
 learning_rate = 0.0002
@@ -36,7 +36,7 @@ zero_dict = {}
 dead_dict = {}
 
 time_stamp = datetime.datetime.fromtimestamp(time.time()).strftime('%Y-%m-%d %H:%M:%S')
-with open('./{}-{}-nonorm_result.txt'.format(layer_size[0], layer_size[1]), "w") as f:
+with open('./{}-{}-l1-leaky_result.txt'.format(layer_size[0], layer_size[1]), "w") as f:
     f.write("{}-{}-{}\n".format(layer_size[0], layer_size[1], num_classes))
     for lambda1 in lambda1s:
         losses = [] # the last test loss list
@@ -55,7 +55,7 @@ with open('./{}-{}-nonorm_result.txt'.format(layer_size[0], layer_size[1]), "w")
             seed(manual_seed*111)
             set_random_seed(manual_seed*111)
             # PATH setting and create
-            PATH = './logs/{}-{}-l1-nonorm/'.format(layer_size[0], layer_size[1])
+            PATH = './logs/{}-{}-l1-leaky/'.format(layer_size[0], layer_size[1])
             if not os.path.exists(PATH):
                 os.mkdir(PATH)
             PATH = add_hparams_to_path(PATH, hparams, manual_seed, time_stamp)
@@ -80,11 +80,11 @@ with open('./{}-{}-nonorm_result.txt'.format(layer_size[0], layer_size[1]), "w")
 
             model = Sequential()
             model.add(Dense(layer_size[0], input_shape=(784,),
-                            activation='relu',
                             activity_regularizer=keras.regularizers.l1(lambda1)))
+            model.add(LeakyReLU())
             model.add(Dense(layer_size[1],
-                            activation='relu',
                             activity_regularizer=keras.regularizers.l1(lambda1)))
+            model.add(LeakyReLU())
             model.add(Dense(num_classes,
                             activation='softmax'))
 
@@ -94,7 +94,9 @@ with open('./{}-{}-nonorm_result.txt'.format(layer_size[0], layer_size[1]), "w")
                           optimizer=Adam(lr=learning_rate, beta_1=adamb1, beta_2=adamb2, epsilon=None, decay=0.0, amsgrad=False),
                           metrics=['accuracy'])
 
-            checkpoint_path = "checkpoints/{}-{}-l1-nonorm/".format(layer_size[0], layer_size[1])
+            checkpoint_path = "checkpoints/{}-{}-l1-leaky/".format(layer_size[0], layer_size[1])
+            if not os.path.exists(checkpoint_path):
+                os.mkdir(checkpoint_path)
             checkpoint_path = add_hparams_to_path(checkpoint_path, hparams, manual_seed, time_stamp)
             checkpoint_path += ".ckpt"
             # Create checkpoint and TensorBoard saving callbacks
@@ -127,18 +129,23 @@ with open('./{}-{}-nonorm_result.txt'.format(layer_size[0], layer_size[1]), "w")
             activations_list = []
 
             imodel1 = Sequential()
-            imodel1.add(Dense(layer_size[0], activation='relu', weights=model.layers[0].get_weights() , input_shape=(784,), activity_regularizer=keras.regularizers.l1(lambda1)))
+            imodel1.add(Dense(layer_size[0], weights=model.layers[0].get_weights() , input_shape=(784,), activity_regularizer=keras.regularizers.l1(lambda1)))
+            model.add(LeakyReLU())
             activations_list.append(imodel1.predict(x_test, batch_size=batch_size, verbose=0, steps=None))
 
             imodel2 = Sequential()
-            imodel2.add(Dense(layer_size[0], activation='relu', weights=model.layers[0].get_weights() , input_shape=(784,), activity_regularizer=keras.regularizers.l1(lambda1)))
-            imodel2.add(Dense(layer_size[1], activation='relu', weights=model.layers[1].get_weights() , activity_regularizer=keras.regularizers.l1(lambda1)))
+            imodel2.add(Dense(layer_size[0], weights=model.layers[0].get_weights() , input_shape=(784,), activity_regularizer=keras.regularizers.l1(lambda1)))
+            model.add(LeakyReLU())
+            imodel2.add(Dense(layer_size[1], weights=model.layers[2].get_weights() , activity_regularizer=keras.regularizers.l1(lambda1)))
+            model.add(LeakyReLU())
             activations_list.append(imodel2.predict(x_test, batch_size=batch_size, verbose=0, steps=None))
 
             imodel3 = Sequential()
-            imodel3.add(Dense(layer_size[0], activation='relu', weights=model.layers[0].get_weights() , input_shape=(784,), activity_regularizer=keras.regularizers.l1(lambda1)))
-            imodel3.add(Dense(layer_size[1], activation='relu', weights=model.layers[1].get_weights() , activity_regularizer=keras.regularizers.l1(lambda1)))
-            imodel3.add(Dense(num_classes, activation='softmax', weights=model.layers[2].get_weights()))
+            imodel3.add(Dense(layer_size[0], weights=model.layers[0].get_weights() , input_shape=(784,), activity_regularizer=keras.regularizers.l1(lambda1)))
+            model.add(LeakyReLU())
+            imodel3.add(Dense(layer_size[1], weights=model.layers[2].get_weights() , activity_regularizer=keras.regularizers.l1(lambda1)))
+            model.add(LeakyReLU())
+            imodel3.add(Dense(num_classes, activation='softmax', weights=model.layers[4].get_weights()))
             activations_list.append(imodel3.predict(x_test, batch_size=batch_size, verbose=0, steps=None))
 
             # Print out how many 0s are in activation of each layer
